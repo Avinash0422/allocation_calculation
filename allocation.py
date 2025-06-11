@@ -30,14 +30,14 @@ def generate_tag_logic(max_tag=25):
         24: [5, 5, 5, 5, 4],
         25: [5, 5, 5, 5, 5]
     }
-    for tag in range(26, max_tag + 1):
-        tag_logic[tag] = [5, 5, 5, 5, 5]
+    # Replace loop with dictionary update for tags 26 to max_tag
+    if max_tag >= 26:
+        tag_logic.update({tag: [5, 5, 5, 5, 5] for tag in range(26, max_tag + 1)})
     return tag_logic
 
 # Define allocation tables for D and B strategies
 allocation_tables = {
     'D': [
-        # {'Min': 1500000, 'Max': 3500000, 'Tags': 1, 'Capital': 4000000, 'SL%': 0.005},
         {'Min': 4000000, 'Max': 6000000, 'Tags': 1, 'Capital': 4000000, 'SL%': 0.005},
         {'Min': 6000000, 'Max': 10000000, 'Tags': 2, 'Capital': 8000000, 'SL%': 0.005},
         {'Min': 10000000, 'Max': 15000000, 'Tags': 3, 'Capital': 12000000, 'SL%': 0.005},
@@ -97,9 +97,9 @@ def process_csv(file):
         df_melted.reset_index(inplace=True)
         df_melted = df_melted.merge(df[["StrategyTag"]], left_on="index", right_index=True, how="left")
         df_melted[["User Type", "User Value"]] = df_melted["User Account"].str.split("=", expand=True)
-        df_melted["User Value"] = pd.to_numeric(df_melted["User Value"], errors="coerce").fillna(1)
+        df_melted["User Value"] = pd.to_numeric(df_melted["User Value"], errors="coerce").fillna(1).astype(int)
         df_counts = df_melted.groupby(["StrategyTag", "User Type"])["User Value"].sum().reset_index()
-        df_pivot = df_counts.pivot(index="StrategyTag", columns="User Type", values="User Value").fillna(0)
+        df_pivot = df_counts.pivot(index="StrategyTag", columns="User Type", values="User Value").fillna(0).astype(int)
         df_pivot = df_pivot.reset_index()
         return df_pivot
     except pd.errors.EmptyDataError:
@@ -135,8 +135,8 @@ def get_allocation_tag(allocation, series):
     # Check for exact capital match
     for capital, tag in capital_deployed_tags[series]:
         if allocation == capital:
-            expected_max_loss = capital * (0.005 if series == 'D' else 0.007)
-            return tag, capital, expected_max_loss, None
+            expected_max_loss = int(capital * (0.005 if series == 'D' else 0.007))
+            return int(tag), int(capital), expected_max_loss, None
 
     # If no exact match, use range-based allocation
     table = allocation_tables[series]
@@ -150,14 +150,14 @@ def get_allocation_tag(allocation, series):
 
     for row in table:
         if row['Min'] <= allocation <= row['Max']:
-            expected_max_loss = row['Capital'] * row['SL%']
-            return row['Tags'], row['Capital'], expected_max_loss, None
+            expected_max_loss = int(row['Capital'] * row['SL%'])
+            return int(row['Tags']), int(row['Capital']), expected_max_loss, None
 
     if allocation > max_allocation:
         increments = (allocation - max_allocation) // range_width
-        new_tag = last_tag + increments
-        new_capital = last_capital + increments * capital_increment
-        expected_max_loss = new_capital * sl_percent
+        new_tag = int(last_tag + increments)
+        new_capital = int(last_capital + increments * capital_increment)
+        expected_max_loss = int(new_capital * sl_percent)
         return new_tag, new_capital, expected_max_loss, f"Extrapolated tag {new_tag} for allocation {allocation}"
 
     return None, None, None, f"No range match found for allocation {allocation} in series {series}."
@@ -187,7 +187,7 @@ def allocate_strategies(file, user_types, strategies, series):
     user_types = [str(user_type) for user_type in user_types]
     df['Telegram ID(s)'] = pd.to_numeric(df['Telegram ID(s)'], errors='coerce').fillna(0).astype(int)
     df['ALLOCATION'] = df['Telegram ID(s)'] * 100
-    df['Max Loss'] = pd.to_numeric(df['Max Loss'], errors='coerce').fillna(0)
+    df['Max Loss'] = pd.to_numeric(df['Max Loss'], errors='coerce').fillna(0).astype(int)
 
     max_allocation = df['ALLOCATION'].max()
     table = allocation_tables[series]
@@ -250,6 +250,7 @@ def style_dataframe(df):
         return f'background-color: {color}; color: white;'
     
     return df.style.applymap(highlight_validity, subset=['Allocation Valid', 'Max Loss Valid', 'Tag Valid'])
+
 def main():
     st.title("Strategy Allocation and Max Loss Validation")
     
@@ -286,18 +287,15 @@ def main():
             if allocation_df is None:
                 return
 
-            # st.subheader("User Allocation and Tag Information")
-            # st.write({k: {'allocation': v['allocation'], 'tag': v['tag'], 'max_loss': v['max_loss'], 'capital': v['capital']} for k, v in user_info.items()})
-
             output_data = []
             for user_type in user_types:
                 row_data = {
                     "userId": user_type,
                     "ALLOCATION": allocation_df[allocation_df["userId"] == user_type]["ALLOCATION"].iloc[0] if not allocation_df[allocation_df["userId"] == user_type].empty else 0,
-                    "Max Loss": allocation_df[allocation_df["userId"] == user_type]["Max Loss"].iloc[0] if not allocation_df[allocation_df["userId"] == user_type].empty else 0,
-                    "Tag": user_info.get(user_type, {}).get('tag', None),
-                    "Capital Deployed": user_info.get(user_type, {}).get('capital', 0),
-                    "Expected Max Loss": user_info.get(user_type, {}).get('expected_max_loss', 0),
+                    "Max Loss": int(allocation_df[allocation_df["userId"] == user_type]["Max Loss"].iloc[0]) if not allocation_df[allocation_df["userId"] == user_type].empty else 0,
+                    "Tag": int(user_info.get(user_type, {}).get('tag', 0)) if user_info.get(user_type, {}).get('tag') else None,
+                    "Capital Deployed": int(user_info.get(user_type, {}).get('capital', 0)),
+                    "Expected Max Loss": int(user_info.get(user_type, {}).get('expected_max_loss', 0)),
                     "Allocation Valid": False,
                     "Max Loss Valid": False,
                     "Tag Valid": False,
@@ -314,13 +312,13 @@ def main():
                 alloc_values = {strategy: alloc_row[strategy].iloc[0] for strategy in strategies} if not alloc_row.empty else {strategy: 0 for strategy in strategies}
                 
                 user_tag = user_info.get(user_type, {}).get('tag', None)
-                expected_strategies = set()
-                if user_tag and series in tag_allocation_rules and user_tag in tag_allocation_rules[series]:
+                expected_strategies = {}
+                if user_tag and tag_allocation_rules.get(series) and user_tag in tag_allocation_rules[series]:
                     rule = tag_allocation_rules[series][user_tag]
                     for idx, strategy in enumerate(strategies, 1):
-                        if rule[str(idx)] > 0:
-                            expected_strategies.add(strategy)
-                
+                        if rule[str(idx)] > 1:
+                            expected_strategies[strategy] = rule[str(idx)]
+
                 tag_valid = True
                 for strategy in strategies:
                     stoxo_row = stoxo_df[stoxo_df["StrategyTag"] == strategy]
