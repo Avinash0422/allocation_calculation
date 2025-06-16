@@ -300,7 +300,7 @@ def allocate_strategies(file, user_types, strategies, series):
     return allocation_df, (allocation_dict, user_info, tag_allocation_rules)
 
 def main():
-    st.title("Strategy Allocation and Max Loss Validation")
+    st.title("Strategy Allocation and Max Loss")
     
     stoxo_file = st.file_uploader("Upload Strategy CSV file", type=["csv"])
     allocation_file = st.file_uploader("Upload User Settings CSV file", type=["csv"])
