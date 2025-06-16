@@ -190,7 +190,7 @@ def get_allocation_tag(allocation, series):
     
     for capital, tag in capital_deployed_tags[series]:
         if allocation == capital:
-            expected_max_loss = int(capital * (1 if series == 'G' else 0.005 if series == 'D' else 0.008))
+            expected_max_loss = int(capital * (0.01 if series == 'G' else 0.005 if series == 'D' else 0.008))
             return int(tag), int(capital), expected_max_loss, None
 
     table = allocation_tables[series]
